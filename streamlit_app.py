@@ -20,71 +20,65 @@ def add_gaussian_noise(image: np.ndarray, mean: float = 0.0, std: float = 25.0):
 	Thêm nhiễu Gaussian vào ảnh xám hoặc ảnh màu.
 	- image: np.ndarray (H,W) hoặc (H,W,3) kiểu uint8
 	- mean, std: tham số nhiễu
-	Trả về: np.ndarray (uint8)
 	"""
 	noise = np.random.normal(mean, std, image.shape)
 	noisy = np.clip(image.astype(np.float32) + noise, 0, 255).astype(np.uint8)
 	return noisy
 
 
-def add_salt_pepper_noise(image: np.ndarray, salt_prob: float = 0.02, pepper_prob: float = 0.02):
-	"""
-	Thêm nhiễu muối tiêu (Salt & Pepper).
-	- salt_prob: tỉ lệ pixel thành 255
-	- pepper_prob: tỉ lệ pixel thành 0
-	Trả về: np.ndarray (uint8)
-	"""
-	noisy = image.copy()
-	mask_salt = np.random.rand(*image.shape[:2]) < salt_prob
-	mask_pepper = np.random.rand(*image.shape[:2]) < pepper_prob
-	if image.ndim == 2:
-		noisy[mask_salt] = 255
-		noisy[mask_pepper] = 0
-	else:
-		noisy[mask_salt] = [255, 255, 255]
-		noisy[mask_pepper] = [0, 0, 0]
-	return noisy
+def add_salt_pepper(img, prob=0.02):
+    """
+    Thêm nhiễu muối tiêu (Salt & Pepper) vào ảnh xám hoặc ảnh màu.
+    - img: np.ndarray (H, W) hoặc (H, W, 3) kiểu uint8
+    - prob: xác suất tổng (trong khoảng 0..1) pixel bị nhiễu; mỗi loại muối/tiêu ~ prob/2
+    """
+    noisy = img.copy()
+    H, W = img.shape[:2]
+    rnd = np.random.rand(H, W)
+
+    # Tạo mặt nạ cho pixel bị đặt về 0 (tiêu) và 255 (muối)
+    mask_pepper = rnd < (prob / 2) #pepper (đen)
+    mask_salt   = rnd > 1 - (prob / 2) #salt (trắng)
+
+    if img.ndim == 2:  # ảnh xám
+        noisy[mask_pepper] = 0
+        noisy[mask_salt]   = 255
+    else:  # ảnh màu (H, W, 3)
+        noisy[mask_pepper] = [0, 0, 0]
+        noisy[mask_salt]   = [255, 255, 255]
+
+    return noisy
 
 
 # ---------- BỘ LỌC LÀM MỜ ----------
 
 def mean_filter(image: np.ndarray, ksize: int = 5):
-	"""Làm mờ trung bình (Mean/Average filter).
-	Trả về: np.ndarray (uint8)
-	"""
+	"""Làm mờ trung bình (Mean/Average filter)."""
 	kernel = np.ones((ksize, ksize), np.float32) / (ksize * ksize)
 	return cv2.filter2D(image, -1, kernel)
 
 
 def gaussian_filter(image: np.ndarray, ksize: int = 5, sigma: float = 1.0):
-	"""Làm mờ Gaussian.
-	Trả về: np.ndarray (uint8)
-	"""
+	"""Làm mờ Gaussian."""
 	ksize = ksize if ksize % 2 == 1 else ksize + 1
 	return cv2.GaussianBlur(image, (ksize, ksize), sigma)
 
 
 def median_filter(image: np.ndarray, ksize: int = 5):
-	"""Làm mờ Median (rất hiệu quả với nhiễu muối tiêu).
-	Trả về: np.ndarray (uint8)
-	"""
+	"""Làm mờ Median hiệu quả với nhiễu muối tiêu."""
 	ksize = ksize if ksize % 2 == 1 else ksize + 1
 	return cv2.medianBlur(image, ksize)
 
 
 def bilateral_filter(image: np.ndarray, d: int = 9, sigma_color: float = 75, sigma_space: float = 75):
-	"""Bộ lọc Bilateral: làm mờ đồng thời vẫn giữ biên.
-	Trả về: np.ndarray (uint8)
-	"""
+	"""Bộ lọc Bilateral: làm mờ đồng thời vẫn giữ biên."""
 	return cv2.bilateralFilter(image, d, sigma_color, sigma_space)
 
 
 # ---------- ĐÁNH GIÁ CHẤT LƯỢNG ----------
 
 def compute_psnr(orig: np.ndarray, proc: np.ndarray) -> float:
-	"""Tính PSNR giữa ảnh gốc và ảnh xử lý.
-	Trả về: float
-	"""
+	"""Tính PSNR giữa ảnh gốc và ảnh xử lý."""
 	return psnr(orig, proc, data_range=255)
 
 
@@ -131,27 +125,25 @@ def convolve2d(img, kernel):
 
 
 def sobel_from_scratch(image: np.ndarray, threshold: float = 50.0):
-	"""Sobel: trả về edges, gx, gy, mag.
-	Trả về: tuple(np.ndarray (uint8), np.ndarray (float32), np.ndarray (float32), np.ndarray (float32))
-	"""
+	"""Sobel: trả về edges, gx, gy, mag."""
 	gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
 	sobel_x = np.array([[-1, 0, 1],
-					   [-2, 0, 2],
-					   [-1, 0, 1]], dtype=np.float32)
+                    [-2, 0, 2],
+                    [-1, 0, 1]], dtype=np.float32)   # Gx (ngang)
+
 	sobel_y = np.array([[-1, -2, -1],
-					   [ 0,  0,  0],
-					   [ 1,  2,  1]], dtype=np.float32)
+                    [ 0,  0,  0],
+                    [ 1,  2,  1]], dtype=np.float32)  # Gy (dọc)
+
 	gx = convolve2d(gray, sobel_x)
 	gy = convolve2d(gray, sobel_y)
-	mag = np.sqrt(gx ** 2 + gy ** 2)
+	mag = np.sqrt(gx ** 2 + gy ** 2) # kết hợp 2 hướng
 	edges = (mag > threshold).astype(np.uint8) * 255
 	return edges.astype(np.uint8), gx.astype(np.float32), gy.astype(np.float32), mag.astype(np.float32)
 
 
 def prewitt_from_scratch(image: np.ndarray, threshold: float = 50.0):
-	"""Prewitt: trả về edges, gx, gy, mag.
-	Trả về: tuple(np.ndarray (uint8), np.ndarray (float32), np.ndarray (float32), np.ndarray (float32))
-	"""
+	"""Prewitt: trả về edges, gx, gy, mag."""
 	gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
 	px = np.array([[-1, 0, 1],
 				  [-1, 0, 1],
@@ -161,15 +153,13 @@ def prewitt_from_scratch(image: np.ndarray, threshold: float = 50.0):
 				  [ 1,  1,  1]], dtype=np.float32)
 	gx = convolve2d(gray, px)
 	gy = convolve2d(gray, py)
-	mag = np.sqrt(gx ** 2 + gy ** 2)
+	mag = np.sqrt(gx ** 2 + gy ** 2) # kết hợp 2 hướng
 	edges = (mag > threshold).astype(np.uint8) * 255
 	return edges.astype(np.uint8), gx.astype(np.float32), gy.astype(np.float32), mag.astype(np.float32)
 
 
 def laplacian_from_scratch(image: np.ndarray, threshold: float = 50.0):
-	"""Laplacian: trả về edges, response.
-	Trả về: tuple(np.ndarray (uint8), np.ndarray (float32))
-	"""
+	"""Laplacian: trả về edges, response."""
 	gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
 	lap = np.array([[0, -1, 0],
 				   [-1, 4, -1],
@@ -180,9 +170,7 @@ def laplacian_from_scratch(image: np.ndarray, threshold: float = 50.0):
 
 
 def canny_reference(image: np.ndarray, low: int = 50, high: int = 150):
-	"""So sánh với Canny của OpenCV.
-	Trả về: np.ndarray (uint8)
-	"""
+	"""So sánh với Canny của OpenCV."""
 	gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
 	return cv2.Canny(gray, low, high)
 
@@ -190,10 +178,7 @@ def canny_reference(image: np.ndarray, low: int = 50, high: int = 150):
 # ----------BÀI 3: TĂNG CƯỜNG ẢNH ----------
 
 def laplacian_sharpen(image: np.ndarray, alpha: float = 1.0):
-	"""
-	Làm sắc nét bằng Laplacian: ưu tiên giữ màu (xử lý kênh sáng trong LAB).
-	Trả về: np.ndarray (uint8, BGR nếu đầu vào màu)
-	"""
+	"""Làm sắc nét bằng Laplacian: ưu tiên giữ màu (xử lý kênh sáng trong LAB)."""
 	if image.ndim == 3:
 		lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
 		L, A, B = cv2.split(lab)
@@ -211,10 +196,7 @@ def laplacian_sharpen(image: np.ndarray, alpha: float = 1.0):
 
 
 def unsharp_mask(image: np.ndarray, ksize: int = 5, sigma: float = 1.0, amount: float = 1.5):
-	"""
-	Unsharp Masking: xử lý kênh sáng để giữ màu; trả về ảnh màu nếu đầu vào màu.
-	Trả về: np.ndarray (uint8, BGR hoặc Gray)
-	"""
+	"""Unsharp Masking: xử lý kênh sáng để giữ màu; trả về ảnh màu nếu đầu vào màu."""
 	if image.ndim == 3:
 		lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
 		L, A, B = cv2.split(lab)
@@ -278,9 +260,7 @@ def medical_edge_detection_pipeline(bgr_image: np.ndarray, gaussian_ksize: int =
 # ---------- HỖ TRỢ VẼ HISTOGRAM ----------
 
 def plot_hist(image: np.ndarray, title: str = "Histogram") -> plt.Figure:
-	"""Trả về Figure matplotlib của histogram ảnh (xám).
-	Trả về: matplotlib.figure.Figure
-	"""
+	"""Trả về Figure matplotlib của histogram ảnh (xám)."""
 	if image.ndim == 3:
 		gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 	else:
@@ -343,10 +323,10 @@ with st.sidebar:
 	task = st.selectbox(
 		"Chọn tác vụ",
 		[
-			"Bài 1: So sánh bộ lọc làm mờ",
-			"Bài 2: Phát hiện biên",
-			"Bài 3: Tăng cường ảnh",
-			"Bài 4: Ảnh y tế (demo pipeline)",
+			"So sánh bộ lọc làm mờ",
+			"Phát hiện biên",
+			"Tăng cường ảnh",
+			"Ảnh y tế (demo pipeline)",
 		]
 	)
 
@@ -364,8 +344,8 @@ with col2:
 	st.pyplot(plot_hist(bgr, title="Histogram trước xử lý"))
 
 # =============== BÀI 1 ===============
-if task == "Bài 1: So sánh bộ lọc làm mờ":
-	st.subheader("Bài 1 – So sánh và phân tích các bộ lọc làm mờ")
+if task == "So sánh bộ lọc làm mờ":
+	st.subheader("So sánh và phân tích các bộ lọc làm mờ")
 
 	# Thêm nhiễu
 	noise_type = st.radio("Chọn loại nhiễu", ["Gaussian noise", "Salt & Pepper"], horizontal=True)
@@ -373,9 +353,8 @@ if task == "Bài 1: So sánh bộ lọc làm mờ":
 		std = st.slider("Độ lệch chuẩn (std)", 1, 60, 25, 1)
 		noisy = add_gaussian_noise(bgr, std=std)
 	else:
-		salt = st.slider("Salt prob", 0.0, 0.2, 0.02, 0.01)
-		pepper = st.slider("Pepper prob", 0.0, 0.2, 0.02, 0.01)
-		noisy = add_salt_pepper_noise(bgr, salt_prob=salt, pepper_prob=pepper)
+		prob = st.slider("Xác suất nhiễu (prob)", 0.0, 0.2, 0.02, 0.01)
+		noisy = add_salt_pepper(bgr, prob=prob)
 
 	st.markdown("**Ảnh có nhiễu**")
 	st.image(to_image(noisy), use_column_width=True)
@@ -383,12 +362,13 @@ if task == "Bài 1: So sánh bộ lọc làm mờ":
 
 	# Tham số bộ lọc
 	st.markdown("---")
-	st.markdown("**Tham số của các bộ lọc**")
-	ksize = st.slider("Kích thước kernel (lẻ)", 3, 21, 5, 2)
-	sigma = st.slider("Sigma (Gaussian)", 0.1, 5.0, 1.0, 0.1)
-	d_bi = st.slider("d (Bilateral)", 3, 21, 9, 2)
-	sc_bi = st.slider("sigmaColor (Bilateral)", 10, 150, 75, 5)
-	ss_bi = st.slider("sigmaSpace (Bilateral)", 10, 150, 75, 5)
+	st.sidebar.markdown("**Tham số của các bộ lọc**")
+	st.markdown("**Kết quả sau lọc**")
+	ksize = st.sidebar.slider("Kích thước kernel (lẻ)", 3, 21, 5, 2)
+	sigma = st.sidebar.slider("Sigma (Gaussian)", 0.1, 5.0, 1.0, 0.1)
+	d_bi = st.sidebar.slider("d (Bilateral)", 3, 21, 9, 2)
+	sc_bi = st.sidebar.slider("sigmaColor (Bilateral)", 10, 150, 75, 5)
+	ss_bi = st.sidebar.slider("sigmaSpace (Bilateral)", 10, 150, 75, 5)
 
 	# Áp dụng
 	mean_img = mean_filter(noisy, ksize)
@@ -410,20 +390,24 @@ if task == "Bài 1: So sánh bộ lọc làm mờ":
 
 	
 
-	# Hiển thị ảnh sau lọc
-	g1, g2 = st.columns(2)
-	with g1:
-		st.image(to_image(mean_img), caption="Mean", use_column_width=True)
-		st.image(to_image(gaus_img), caption="Gaussian", use_column_width=True)
-	with g2:
-		st.image(to_image(medi_img), caption="Median", use_column_width=True)
-		st.image(to_image(bila_img), caption="Bilateral", use_column_width=True)
+	# Hiển thị 4 ảnh sau lọc theo hàng ngang
+	col_a, col_b, col_c, col_d = st.columns(4)
+	with col_a:
+		st.image(to_image(mean_img), caption=f"Mean (kernel={ksize})", use_column_width=True)
+	with col_b:
+		st.image(to_image(gaus_img), caption=f"Gaussian (kernel={ksize}, sigma={sigma})", use_column_width=True)
+	with col_c:
+		st.image(to_image(medi_img), caption=f"Median (kernel={ksize})", use_column_width=True)
+	with col_d:
+		st.image(to_image(bila_img), caption=f"Bilateral (d={d_bi}, sc={sc_bi}, ss={ss_bi})", use_column_width=True)
 
 	st.markdown("---")
 	st.markdown("**So sánh kết quả (PSNR / SSIM)**")
-	for name in ["Mean", "Gaussian", "Median", "Bilateral"]:
-		st.write(f"{name}: PSNR={psnrs[name]:.2f} dB, SSIM={ssims[name]:.4f}")
-
+	st.write(f"Mean (kernel={ksize}): PSNR={psnrs['Mean']:.2f} dB, SSIM={ssims['Mean']:.4f}")
+	st.write(f"Gaussian (kernel={ksize}, sigma={sigma}): PSNR={psnrs['Gaussian']:.2f} dB, SSIM={ssims['Gaussian']:.4f}")
+	st.write(f"Median (kernel={ksize}): PSNR={psnrs['Median']:.2f} dB, SSIM={ssims['Median']:.4f}")
+	st.write(f"Bilateral (d={d_bi}, sc={sc_bi}, ss={ss_bi}): PSNR={psnrs['Bilateral']:.2f} dB, SSIM={ssims['Bilateral']:.4f}")
+	
 	st.markdown("---")
 	st.subheader("Histogram trước/sau lọc")
 	# Histogram của ảnh gốc, ảnh sau khi thêm nhiễu và ảnh sau lọc
@@ -431,29 +415,36 @@ if task == "Bài 1: So sánh bộ lọc làm mờ":
 	with h0c1:
 		st.pyplot(plot_hist(bgr, title="Gốc"))
 	with h0c2:
-		st.pyplot(plot_hist(noisy, title="Sau thêm nhiễu"))
+		st.pyplot(plot_hist(noisy, title="Sau thêm nhiễu (" + noise_type + ")"))
 	h_cols = st.columns(4)
-	for ax, (name, img) in zip(h_cols, {"Mean": mean_img, "Gaussian": gaus_img, "Median": medi_img, "Bilateral": bila_img}.items()):
-		with ax:
-			st.pyplot(plot_hist(img, title=f"{name}"))
+	with h_cols[0]:
+		st.pyplot(plot_hist(mean_img, title=f"Mean (kernel={ksize})"))
+	with h_cols[1]:
+		st.pyplot(plot_hist(gaus_img, title=f"Gaussian (kernel={ksize}, sigma={sigma})"))
+	with h_cols[2]:
+		st.pyplot(plot_hist(medi_img, title=f"Median (kernel={ksize})"))
+	with h_cols[3]:
+		st.pyplot(plot_hist(bila_img, title=f"Bilateral (d={d_bi}, sc={sc_bi}, ss={ss_bi})"))
 
 # =============== BÀI 2 ===============
-elif task == "Bài 2: Phát hiện biên":
-	st.subheader("Bài 2 – Edge Detection")
+elif task == "Phát hiện biên":
+	st.subheader("Edge Detection")
 	gray = ensure_gray(bgr)
 
-	thr = st.slider("Ngưỡng (threshold)", 1, 200, 50, 1)
-	low = st.slider("Canny low", 1, 200, 50, 1)
-	high = st.slider("Canny high", 1, 300, 150, 1)
+	thr = st.sidebar.slider("Ngưỡng (threshold)", 1, 200, 50, 1)
+	low = st.sidebar.slider("Canny low", 1, 200, 50, 1)
+	high = st.sidebar.slider("Canny high", 1, 300, 150, 1)
 
 	s_edges, s_gx, s_gy, s_mag = sobel_from_scratch(bgr, thr)
 	p_edges, p_gx, p_gy, p_mag = prewitt_from_scratch(bgr, thr)
 	l_edges, l_resp = laplacian_from_scratch(bgr, thr)
 	c_edges = canny_reference(bgr, low, high)
 
-	# Hiển thị pipeline: gx, gy, magnitude, threshold
+	# Hiển thị pipeline: gray, gx, gy, magnitude, threshold
 	st.markdown("**Sobel – các bước**")
-	c1, c2, c3, c4 = st.columns(4)
+	c0, c1, c2, c3, c4 = st.columns(5)
+	with c0:
+		st.image(to_image(gray), caption="Ảnh xám gốc", use_column_width=True)
 	with c1:
 		st.image(to_image((np.abs(s_gx) / (np.max(np.abs(s_gx))+1e-5) * 255).astype(np.uint8)), caption="Gradient X", use_column_width=True)
 	with c2:
@@ -461,11 +452,13 @@ elif task == "Bài 2: Phát hiện biên":
 	with c3:
 		st.image(to_image((s_mag / (np.max(s_mag)+1e-5) * 255).astype(np.uint8)), caption="Magnitude", use_column_width=True)
 	with c4:
-		st.image(to_image(s_edges), caption="Thresholded", use_column_width=True)
+		st.image(to_image(s_edges), caption="Thresholded (" + str(thr) + ")", use_column_width=True)
 
 	# Pipeline Prewitt
 	st.markdown("**Prewitt – các bước**")
-	pc1, pc2, pc3, pc4 = st.columns(4)
+	pc0, pc1, pc2, pc3, pc4 = st.columns(5)
+	with pc0:
+		st.image(to_image(gray), caption="Ảnh xám gốc", use_column_width=True)
 	with pc1:
 		st.image(to_image((np.abs(p_gx) / (np.max(np.abs(p_gx))+1e-5) * 255).astype(np.uint8)), caption="Gradient X", use_column_width=True)
 	with pc2:
@@ -473,28 +466,32 @@ elif task == "Bài 2: Phát hiện biên":
 	with pc3:
 		st.image(to_image((p_mag / (np.max(p_mag)+1e-5) * 255).astype(np.uint8)), caption="Magnitude", use_column_width=True)
 	with pc4:
-		st.image(to_image(p_edges), caption="Thresholded", use_column_width=True)
+		st.image(to_image(p_edges), caption="Thresholded (" + str(thr) + ")", use_column_width=True)
 
 	# Pipeline Laplacian
 	st.markdown("**Laplacian – các bước**")
-	lc1, lc2, lc3 = st.columns(3)
+	lc0, lc1, lc2, lc3 = st.columns(4)
+	with lc0:
+		st.image(to_image(gray), caption="Ảnh xám gốc", use_column_width=True)
 	with lc1:
 		st.image(to_image(((l_resp - l_resp.min()) / (l_resp.max() - l_resp.min() + 1e-5) * 255).astype(np.uint8)), caption="Response (chuẩn hoá)", use_column_width=True)
 	with lc2:
 		st.image(to_image((np.abs(l_resp) / (np.max(np.abs(l_resp))+1e-5) * 255).astype(np.uint8)), caption="|Response|", use_column_width=True)
 	with lc3:
-		st.image(to_image(l_edges), caption="Thresholded", use_column_width=True)
+		st.image(to_image(l_edges), caption="Thresholded (" + str(thr) + ")", use_column_width=True)
 
 	st.markdown("---")
 	st.markdown("**So sánh phương pháp**")
-	cc1, cc2, cc3, cc4 = st.columns(4)
+	cc1, cc2, cc3, cc4, cc5 = st.columns(5)
 	with cc1:
-		st.image(to_image(s_edges), caption="Sobel", use_column_width=True)
+		st.image(to_image(gray),caption="Ảnh xám gốc", use_column_width=True)
 	with cc2:
-		st.image(to_image(p_edges), caption="Prewitt", use_column_width=True)
+		st.image(to_image(s_edges), caption="Sobel", use_column_width=True)
 	with cc3:
-		st.image(to_image(l_edges), caption="Laplacian", use_column_width=True)
+		st.image(to_image(p_edges), caption="Prewitt", use_column_width=True)
 	with cc4:
+		st.image(to_image(l_edges), caption="Laplacian", use_column_width=True)
+	with cc5:
 		st.image(to_image(c_edges), caption="Canny (tham chiếu)", use_column_width=True)
 
 	# Phân tích độ nhạy ngưỡng
@@ -508,15 +505,15 @@ elif task == "Bài 2: Phát hiện biên":
 			st.image(to_image(ed), caption=f"Threshold={t}", use_column_width=True)
 
 # =============== BÀI 3 ===============
-elif task == "Bài 3: Tăng cường ảnh":
-	st.subheader("Bài 3 – Image Enhancement")
+elif task == "Tăng cường ảnh":
+	st.subheader("Image Enhancement")
 	st.markdown("Mục tiêu: làm sắc nét (Laplacian/Unsharp) + cân bằng histogram để cải thiện ảnh mờ/thiếu sáng.")
 
 	# Tham số
-	alpha = st.slider("Alpha (Laplacian sharpen)", 0.1, 3.0, 1.0, 0.1)
-	ks = st.slider("Kernel Gaussian (lẻ)", 3, 21, 5, 2)
-	sig = st.slider("Sigma Gaussian", 0.1, 5.0, 1.0, 0.1)
-	amt = st.slider("Amount (Unsharp)", 0.1, 3.0, 1.5, 0.1)
+	alpha = st.sidebar.slider("Alpha (Laplacian sharpen)", 0.1, 3.0, 1.0, 0.1)
+	ks = st.sidebar.slider("Kernel Gaussian (Unsharp Masking)", 3, 21, 5, 2)
+	sig = st.sidebar.slider("Sigma Gaussian (Unsharp Masking)", 0.1, 5.0, 1.0, 0.1)
+	amt = st.sidebar.slider("Amount (Unsharp Masking)", 0.1, 3.0, 1.5, 0.1)
 	
 
 	lap_sharp = laplacian_sharpen(bgr, alpha)
@@ -550,7 +547,7 @@ elif task == "Bài 3: Tăng cường ảnh":
 	# Gợi ý workflow cho ảnh điện thoại: giảm nhiễu nhẹ -> CLAHE -> Unsharp
 	st.markdown("---")
 	st.markdown("**Workflow gợi ý (ảnh điện thoại):** Gaussian mờ nhẹ → CLAHE → Unsharp")
-	phone_sigma = st.slider("Sigma mờ nhẹ (trước CLAHE)", 0.0, 2.0, 0.6, 0.1)
+	phone_sigma = st.sidebar.slider("Sigma Gaussian (Workflow)", 0.0, 2.0, 0.6, 0.1)
 	pre_denoise = gaussian_filter(bgr, ksize=5, sigma=phone_sigma) if phone_sigma > 0 else bgr
 	phone_eq = clahe_equalization(pre_denoise, clip=2.0, tile=(8,8))
 	phone_sharp = unsharp_mask(phone_eq, ksize=ks, sigma=sig, amount=amt)
@@ -571,7 +568,7 @@ elif task == "Bài 3: Tăng cường ảnh":
 
 # =============== BÀI 4 ===============
 else:
-	st.subheader("Bài 4 – Phát hiện biên trên ảnh y tế")
+	st.subheader("Phát hiện biên trên ảnh y tế")
 	st.markdown("Nguồn dữ liệu công khai: Kaggle/NIH")
 
 	# Gọi hàm pipeline bài 4
@@ -607,14 +604,14 @@ st.subheader("Xuất/Lưu ảnh")
 
 # Cho phép người dùng tự chọn ảnh muốn xuất theo từng tác vụ
 export_options = {}
-if task == "Bài 1: So sánh bộ lọc làm mờ":
+if task == "So sánh bộ lọc làm mờ":
 	export_options = {
 		"Mean": mean_img,
 		"Gaussian": gaus_img,
 		"Median": medi_img,
 		"Bilateral": bila_img,
 	}
-elif task == "Bài 2: Phát hiện biên":
+elif task == "Phát hiện biên":
 	export_options = {
 		"Sobel - Edges": s_edges,
 		"Prewitt - Edges": p_edges,
@@ -622,7 +619,7 @@ elif task == "Bài 2: Phát hiện biên":
 		"Canny": c_edges,
 		
 	}
-elif task == "Bài 3: Tăng cường ảnh":
+elif task == "Tăng cường ảnh":
 	export_options = {
 		"Laplacian sharpen": lap_sharp,
 		"Unsharp Masking": unsharp,
