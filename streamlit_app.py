@@ -53,26 +53,45 @@ def add_salt_pepper(img, prob=0.02):
 # ---------- BỘ LỌC LÀM MỜ ----------
 
 def mean_filter(image: np.ndarray, ksize: int = 5):
-	"""Làm mờ trung bình (Mean/Average filter)."""
-	kernel = np.ones((ksize, ksize), np.float32) / (ksize * ksize)
-	return cv2.filter2D(image, -1, kernel)
+    """Làm mờ trung bình (from scratch)."""
+    kernel = np.ones((ksize, ksize), np.float32) / (ksize * ksize)
+    return cv2.filter2D(image,-1, kernel)
+
 
 
 def gaussian_filter(image: np.ndarray, ksize: int = 5, sigma: float = 1.0):
-	"""Làm mờ Gaussian."""
-	ksize = ksize if ksize % 2 == 1 else ksize + 1
-	return cv2.GaussianBlur(image, (ksize, ksize), sigma)
+    """Làm mờ Gaussian (from scratch)."""
+    ksize = ksize if ksize % 2 == 1 else ksize + 1
+    ax = np.arange(-ksize // 2 + 1., ksize // 2 + 1.)
+    xx, yy = np.meshgrid(ax, ax)
+
+    # Công thức Gaussian 2D với hệ số chuẩn hóa
+    kernel = (1.0 / (2.0 * np.pi * sigma**2)) * np.exp(-(xx**2 + yy**2) / (2.0 * sigma**2))
+
+    # Chuẩn hóa sao cho tổng = 1 (đảm bảo không đổi độ sáng ảnh)
+    kernel = kernel / np.sum(kernel)
+
+    # Dùng hàm tích chập tự viết (không dùng cv2.filter2D)
+    return cv2.filter2D(image, -1, kernel.astype(np.float32))
+
 
 
 def median_filter(image: np.ndarray, ksize: int = 5):
-	"""Làm mờ Median hiệu quả với nhiễu muối tiêu."""
-	ksize = ksize if ksize % 2 == 1 else ksize + 1
-	return cv2.medianBlur(image, ksize)
+    """Lọc Median dùng OpenCV; hỗ trợ ảnh xám/màu, kernel lẻ."""
+    ksize = ksize if ksize % 2 == 1 else ksize + 1
+    return cv2.medianBlur(image, ksize)
+
 
 
 def bilateral_filter(image: np.ndarray, d: int = 9, sigma_color: float = 75, sigma_space: float = 75):
-	"""Bộ lọc Bilateral: làm mờ đồng thời vẫn giữ biên."""
-	return cv2.bilateralFilter(image, d, sigma_color, sigma_space)
+	"""Bộ lọc Bilateral: làm mờ đồng thời vẫn giữ biên.
+	Tham số:
+	- image: np.ndarray (H,W) hoặc (H,W,3) kiểu uint8
+	- d: đường kính vùng lân cận (pixel). Nếu d <= 0, OpenCV suy ra từ sigmaSpace.
+	- sigma_color: độ lệch chuẩn trong không gian màu; lớn hơn → làm mờ mạnh hơn theo màu.
+	- sigma_space: độ lệch chuẩn trong không gian toạ độ; lớn hơn → ảnh hưởng xa hơn.
+	"""
+	return cv2.bilateralFilter(image, d, sigma_color, sigma_space) 
 
 
 # ---------- ĐÁNH GIÁ CHẤT LƯỢNG ----------
@@ -125,21 +144,26 @@ def convolve2d(img, kernel):
 
 
 def sobel_from_scratch(image: np.ndarray, threshold: float = 50.0):
-	"""Sobel: trả về edges, gx, gy, mag."""
-	gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
-	sobel_x = np.array([[-1, 0, 1],
-                    [-2, 0, 2],
-                    [-1, 0, 1]], dtype=np.float32)   # Gx (ngang)
+    """Sobel : trả về edges, gx, gy, mag.
+    - gx: gradient theo X (phát hiện biên dọc)
+    - gy: gradient theo Y (phát hiện biên ngang)
+    """
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
 
-	sobel_y = np.array([[-1, -2, -1],
-                    [ 0,  0,  0],
-                    [ 1,  2,  1]], dtype=np.float32)  # Gy (dọc)
+    # Kernel Sobel
+    sobel_x = np.array([[-1, -2, -1],
+                        [ 0,  0,  0],
+                        [ 1,  2,  1]], dtype=np.float32)   # Gx (biên dọc)
 
-	gx = convolve2d(gray, sobel_x)
-	gy = convolve2d(gray, sobel_y)
-	mag = np.sqrt(gx ** 2 + gy ** 2) # kết hợp 2 hướng
-	edges = (mag > threshold).astype(np.uint8) * 255
-	return edges.astype(np.uint8), gx.astype(np.float32), gy.astype(np.float32), mag.astype(np.float32)
+    sobel_y = np.array([[-1,  0,  1],
+                        [-2,  0,  2],
+                        [-1,  0,  1]], dtype=np.float32)   # Gy (biên ngang)
+
+    gx = convolve2d(gray, sobel_x)
+    gy = convolve2d(gray, sobel_y)
+    mag = np.sqrt(gx ** 2 + gy ** 2)  # kết hợp 2 hướng
+    edges = (mag > threshold).astype(np.uint8) * 255
+    return edges.astype(np.uint8), gx.astype(np.float32), gy.astype(np.float32), mag.astype(np.float32)
 
 
 def prewitt_from_scratch(image: np.ndarray, threshold: float = 50.0):
@@ -236,7 +260,7 @@ def clahe_equalization(image: np.ndarray, clip: float = 2.0, tile: int = 8):
 
 # ---------- BÀI 4: ẢNH Y TẾ  ----------
 def medical_edge_detection_pipeline(bgr_image: np.ndarray, gaussian_ksize: int = 5, gaussian_sigma: float = 1.0,
-									   threshold: int = 40, canny_low: int = 30, canny_high: int = 80):
+									   threshold: int = 50, canny_low: int = 30, canny_high: int = 80):
 	"""
 	Pipeline phát hiện biên cho ảnh y tế dùng các phương pháp ở Bài 2.
 	Trả về: dict gồm gray, denoised, s_edges, p_edges, l_edges, c_edges
@@ -245,7 +269,7 @@ def medical_edge_detection_pipeline(bgr_image: np.ndarray, gaussian_ksize: int =
 	denoised = gaussian_filter(gray, ksize=gaussian_ksize, sigma=gaussian_sigma)
 	s_edges, _, _, _ = sobel_from_scratch(denoised, threshold)
 	p_edges, _, _, _ = prewitt_from_scratch(denoised, threshold)
-	l_edges, _ = laplacian_from_scratch(denoised, threshold)
+	l_edges, _ = laplacian_from_scratch(gray, threshold)
 	c_edges = canny_reference(denoised, canny_low, canny_high)
 	return {
 		"gray": gray,
@@ -440,6 +464,20 @@ elif task == "Phát hiện biên":
 	l_edges, l_resp = laplacian_from_scratch(bgr, thr)
 	c_edges = canny_reference(bgr, low, high)
 
+		# Pipeline Prewitt
+	st.markdown("**Prewitt – các bước**")
+	pc0, pc1, pc2, pc3, pc4 = st.columns(5)
+	with pc0:
+		st.image(to_image(gray), caption="Ảnh xám gốc", use_column_width=True)
+	with pc1:
+		st.image(to_image((np.abs(p_gx) / (np.max(np.abs(p_gx))+1e-5) * 255).astype(np.uint8)), caption="Gradient X", use_column_width=True)
+	with pc2:
+		st.image(to_image((np.abs(p_gy) / (np.max(np.abs(p_gy))+1e-5) * 255).astype(np.uint8)), caption="Gradient Y", use_column_width=True)
+	with pc3:
+		st.image(to_image((p_mag / (np.max(p_mag)+1e-5) * 255).astype(np.uint8)), caption="Magnitude", use_column_width=True)
+	with pc4:
+		st.image(to_image(p_edges), caption="Thresholded (" + str(thr) + ")", use_column_width=True)
+
 	# Hiển thị pipeline: gray, gx, gy, magnitude, threshold
 	st.markdown("**Sobel – các bước**")
 	c0, c1, c2, c3, c4 = st.columns(5)
@@ -454,19 +492,7 @@ elif task == "Phát hiện biên":
 	with c4:
 		st.image(to_image(s_edges), caption="Thresholded (" + str(thr) + ")", use_column_width=True)
 
-	# Pipeline Prewitt
-	st.markdown("**Prewitt – các bước**")
-	pc0, pc1, pc2, pc3, pc4 = st.columns(5)
-	with pc0:
-		st.image(to_image(gray), caption="Ảnh xám gốc", use_column_width=True)
-	with pc1:
-		st.image(to_image((np.abs(p_gx) / (np.max(np.abs(p_gx))+1e-5) * 255).astype(np.uint8)), caption="Gradient X", use_column_width=True)
-	with pc2:
-		st.image(to_image((np.abs(p_gy) / (np.max(np.abs(p_gy))+1e-5) * 255).astype(np.uint8)), caption="Gradient Y", use_column_width=True)
-	with pc3:
-		st.image(to_image((p_mag / (np.max(p_mag)+1e-5) * 255).astype(np.uint8)), caption="Magnitude", use_column_width=True)
-	with pc4:
-		st.image(to_image(p_edges), caption="Thresholded (" + str(thr) + ")", use_column_width=True)
+
 
 	# Pipeline Laplacian
 	st.markdown("**Laplacian – các bước**")
@@ -486,9 +512,9 @@ elif task == "Phát hiện biên":
 	with cc1:
 		st.image(to_image(gray),caption="Ảnh xám gốc", use_column_width=True)
 	with cc2:
-		st.image(to_image(s_edges), caption="Sobel", use_column_width=True)
-	with cc3:
 		st.image(to_image(p_edges), caption="Prewitt", use_column_width=True)
+	with cc3:
+		st.image(to_image(s_edges), caption="Sobel", use_column_width=True)
 	with cc4:
 		st.image(to_image(l_edges), caption="Laplacian", use_column_width=True)
 	with cc5:
@@ -521,25 +547,29 @@ elif task == "Tăng cường ảnh":
 	lap_sharp_eq = clahe_equalization(lap_sharp, clip=2.0, tile=(8,8)) 
 	unsharp_eq = clahe_equalization(unsharp, clip=2.0, tile=(8,8))
 
-	c1, c2, c3, c4 = st.columns(4)
+	c1, c2, c3, c4, c5 = st.columns(5)
 	with c1:
-		st.image(to_image(lap_sharp), caption="Laplacian sharpen", use_column_width=True)
+		st.image(to_image(bgr), caption="Original", use_column_width=True)
 	with c2:
-		st.image(to_image(lap_sharp_eq), caption="Laplacian sharpen with CLAHE", use_column_width=True)
+		st.image(to_image(lap_sharp), caption="Laplacian sharpen", use_column_width=True)
 	with c3:
-		st.image(to_image(unsharp), caption="Unsharp Masking", use_column_width=True)
+		st.image(to_image(lap_sharp_eq), caption="Laplacian sharpen with CLAHE", use_column_width=True)
 	with c4:
+		st.image(to_image(unsharp), caption="Unsharp Masking", use_column_width=True)
+	with c5:
 		st.image(to_image(unsharp_eq), caption="Unsharp Masking with CLAHE", use_column_width=True)
 
 	# Histogram của 4 ảnh 
-	hc1, hc2, hc3, hc4 = st.columns(4)
+	hc1, hc2, hc3, hc4, hc5 = st.columns(5)
 	with hc1:
-		st.pyplot(plot_hist(lap_sharp, title="Hist: Laplacian"))
+		st.pyplot(plot_hist(bgr, title="Hist: Original"))
 	with hc2:
-		st.pyplot(plot_hist(lap_sharp_eq, title="Hist: Lap+CLAHE"))
+		st.pyplot(plot_hist(lap_sharp, title="Hist: Laplacian"))
 	with hc3:
-		st.pyplot(plot_hist(unsharp, title="Hist: Unsharp"))
+		st.pyplot(plot_hist(lap_sharp_eq, title="Hist: Lap+CLAHE"))
 	with hc4:
+		st.pyplot(plot_hist(unsharp, title="Hist: Unsharp"))
+	with hc5:
 		st.pyplot(plot_hist(unsharp_eq, title="Hist: Unsharp+CLAHE"))
 
 	st.markdown("Giải thích: CLAHE tăng tương phản cục bộ ở vùng thiếu sáng; Unsharp tăng chi tiết biên sau khi tương phản được cải thiện → ảnh sắc nét và rõ ràng hơn.")
@@ -571,9 +601,16 @@ else:
 	st.subheader("Phát hiện biên trên ảnh y tế")
 	st.markdown("Nguồn dữ liệu công khai: Kaggle/NIH")
 
+	# Tham số cho pipeline y tế
+	gaussian_ksize = st.sidebar.slider("Gaussian kernel (lẻ)", 3, 21, 5, 2)
+	gaussian_sigma = st.sidebar.slider("Gaussian sigma", 0.1, 5.0, 1.0, 0.1)
+	threshold = st.sidebar.slider("Threshold (Sobel/Prewitt/Laplacian)", 1, 200, 50, 1)
+	canny_low = st.sidebar.slider("Canny low", 1, 200, 30, 1)
+	canny_high = st.sidebar.slider("Canny high", 1, 300, 80, 1)
+
 	# Gọi hàm pipeline bài 4
-	med = medical_edge_detection_pipeline(bgr, gaussian_ksize=5, gaussian_sigma=1.0,
-											 threshold=40, canny_low=30, canny_high=80)
+	med = medical_edge_detection_pipeline(bgr, gaussian_ksize=gaussian_ksize, gaussian_sigma=gaussian_sigma,
+										 threshold=threshold, canny_low=canny_low, canny_high=canny_high)
 
 	# Hiển thị pipeline đầu vào và kết quả biên
 	m1, m2, m3 = st.columns(3)
@@ -588,11 +625,11 @@ else:
 	st.subheader("So sánh các phương pháp phát hiện biên")
 	cx1, cx2, cx3, cx4 = st.columns(4)
 	with cx1:
-		st.image(to_image(med["s_edges"]), caption="Sobel", use_column_width=True)
+		st.image(to_image(med["s_edges"]), caption="Sobel (threshold=" + str(threshold) + ")", use_column_width=True)
 	with cx2:
-		st.image(to_image(med["p_edges"]), caption="Prewitt", use_column_width=True)
+		st.image(to_image(med["p_edges"]), caption="Prewitt (threshold=" + str(threshold) + ")", use_column_width=True)
 	with cx3:
-		st.image(to_image(med["l_edges"]), caption="Laplacian", use_column_width=True)
+		st.image(to_image(med["l_edges"]), caption="Laplacian (threshold=" + str(threshold) + ")", use_column_width=True)
 	with cx4:
 		st.image(to_image(med["c_edges"]), caption="Canny", use_column_width=True)
 
