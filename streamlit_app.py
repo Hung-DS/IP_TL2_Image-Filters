@@ -201,7 +201,7 @@ def canny_reference(image: np.ndarray, low: int = 50, high: int = 150):
 
 # ----------BÀI 3: TĂNG CƯỜNG ẢNH ----------
 
-def laplacian_sharpen(image: np.ndarray, alpha: float = 1.0):
+def laplacian_sharpen(image: np.ndarray, alpha: float = 0.5):
 	"""Làm sắc nét bằng Laplacian: ưu tiên giữ màu (xử lý kênh sáng trong LAB)."""
 	if image.ndim == 3:
 		lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
@@ -536,7 +536,7 @@ elif task == "Tăng cường ảnh":
 	st.markdown("Mục tiêu: làm sắc nét (Laplacian/Unsharp) + cân bằng histogram để cải thiện ảnh mờ/thiếu sáng.")
 
 	# Tham số
-	alpha = st.sidebar.slider("Alpha (Laplacian sharpen)", 0.1, 3.0, 1.0, 0.1)
+	alpha = st.sidebar.slider("Alpha (Laplacian sharpen)", 0.1, 3.0, 0.5, 0.1)
 	ks = st.sidebar.slider("Kernel Gaussian (Unsharp Masking)", 3, 21, 5, 2)
 	sig = st.sidebar.slider("Sigma Gaussian (Unsharp Masking)", 0.1, 5.0, 1.0, 0.1)
 	amt = st.sidebar.slider("Amount (Unsharp Masking)", 0.1, 3.0, 1.5, 0.1)
